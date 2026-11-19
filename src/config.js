@@ -1,10 +1,10 @@
 // Supabase connection. These two values are safe to keep in the code:
-// the anon key only works for people on your team list (see supabase/setup.sql).
+// the publishable key only works for people on your team list (see supabase/setup.sql).
 // You can also set them as VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY in Vercel.
 export const SUPABASE_URL =
-  import.meta.env.VITE_SUPABASE_URL || 'PASTE_SUPABASE_PROJECT_URL_HERE'
+  import.meta.env.VITE_SUPABASE_URL || 'https://wwdqllylizzarajdxfjc.supabase.co'
 export const SUPABASE_ANON_KEY =
-  import.meta.env.VITE_SUPABASE_ANON_KEY || 'PASTE_SUPABASE_ANON_KEY_HERE'
+  import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_lypXn_JAZkKtYOn2o1jLDg_ICCFj5NI'
 
 // Business info printed on estimates
 export const BUSINESS = {
