@@ -78,7 +78,7 @@ function Shell() {
 function Splash() {
   return (
     <div className="splash">
-      <img src="/icon.svg" alt="" width="72" height="72" />
+      <img src="/logo.png" alt="" width="72" height="70" />
       <div className="spinner" />
     </div>
   )

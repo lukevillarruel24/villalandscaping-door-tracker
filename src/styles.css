@@ -447,3 +447,14 @@ button.legend { cursor: pointer; }
 .chart-axis span { flex: 1; min-width: 0; font-size: 10px; color: var(--muted); white-space: nowrap; overflow: visible; }
 @media (min-width: 700px) { .tiles { grid-template-columns: repeat(3, 1fr); } }
 .view-day { margin-left: 8px; font-weight: 700; }
+.doc-brand-wrap { display: flex; gap: 12px; align-items: flex-start; }
+.doc-logo { width: 58px; height: auto; flex-shrink: 0; }
+.doc-parties { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.doc-parties .doc-client:nth-child(2) { text-align: right; }
+@media (max-width: 600px) { .doc-logo { width: 40px; } }
+@media (max-width: 600px) {
+  .doc-head { flex-direction: column-reverse; gap: 12px; }
+  .doc-meta { text-align: left; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .doc-title { font-size: 16px; }
+}
+.doc-brand-wrap .muted { overflow-wrap: anywhere; }

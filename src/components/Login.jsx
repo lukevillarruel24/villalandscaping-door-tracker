@@ -37,7 +37,7 @@ export default function Login() {
     <div className="center-page login-page">
       <form className="card narrow" onSubmit={signIn}>
         <div className="login-brand">
-          <img src="/icon.svg" alt="" width="56" height="56" />
+          <img src="/logo.png" alt="Villa Landscaping" width="56" height="54" />
           <div>
             <h1>Villa Doors</h1>
             <p className="muted">Villa Landscaping lead tracker</p>

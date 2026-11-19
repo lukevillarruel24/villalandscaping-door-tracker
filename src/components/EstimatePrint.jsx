@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useStore } from '../lib/store.jsx'
-import { BUSINESS } from '../config.js'
+import { BUSINESS, TEAM_CONTACTS } from '../config.js'
 import { estimateTotals, fmtDate, fmtMoney } from '../lib/format.js'
 import { Icon } from './Icon.jsx'
 
 export default function EstimatePrint() {
   const { id } = useParams()
-  const { contacts } = useStore()
+  const { contacts, profiles } = useStore()
   const nav = useNavigate()
   const [est, setEst] = useState(null)
 
@@ -27,6 +27,9 @@ export default function EstimatePrint() {
   const c = contacts.find((x) => x.id === est.contact_id) || {}
   const items = (est.estimate_items || []).sort((a, b) => a.position - b.position)
   const t = estimateTotals(items, est.tax_rate)
+  const author = profiles[est.created_by]
+  const prep = TEAM_CONTACTS[(author?.email || '').toLowerCase()] ||
+    (author ? { name: author.full_name, phone: '' } : null)
 
   return (
     <div className="print-page">
@@ -41,7 +44,9 @@ export default function EstimatePrint() {
 
       <div className="doc">
         <div className="doc-head">
-          <div>
+          <div className="doc-brand-wrap">
+            <img src="/logo.png" alt="" className="doc-logo" />
+            <div>
             <div className="doc-brand">{BUSINESS.name}</div>
             <div className="muted small">
               {BUSINESS.legalName}
@@ -52,6 +57,7 @@ export default function EstimatePrint() {
               <br />
               {BUSINESS.website}
             </div>
+            </div>
           </div>
           <div className="doc-meta">
             <div className="doc-title">ESTIMATE</div>
@@ -60,12 +66,21 @@ export default function EstimatePrint() {
           </div>
         </div>
 
+        <div className="doc-parties">
         <div className="doc-client">
           <div className="label">Prepared for</div>
           <b>{c.name}</b>
           {c.address && <div>{c.address}</div>}
           {c.phone && <div>{c.phone}</div>}
           {c.email && <div>{c.email}</div>}
+        </div>
+        {prep && (
+          <div className="doc-client">
+            <div className="label">Prepared by</div>
+            <b>{prep.name}</b>
+            {prep.phone && <div>{prep.phone}</div>}
+          </div>
+        )}
         </div>
 
         <h2 className="doc-project">{est.title}</h2>

@@ -12,8 +12,14 @@ export const BUSINESS = {
   legalName: 'Villa Creations LLC',
   city: 'Calhoun, GA',
   website: 'villalandscapings.com',
-  phone: '',
-  email: '',
+  phone: '(770) 310-5428',
+  email: 'villalandscaping2000@gmail.com',
+}
+
+// Shown as "Prepared by" on estimates, matched by login email
+export const TEAM_CONTACTS = {
+  'lukevillarruel24@gmail.com': { name: 'Luke Villarruel', phone: '(770) 310-5428' },
+  'sebastian@svfarms.com': { name: 'Sebastian', phone: '(502) 888-9047' },
 }
 
 // Where the map opens before GPS kicks in (Calhoun, GA)
