@@ -4,7 +4,8 @@ import { supabase } from '../lib/supabase.js'
 import { useStore } from '../lib/store.jsx'
 import { STAGE_BY_KEY } from '../lib/constants.js'
 import { fmtDate, telHref, smsHref, directionsHref } from '../lib/format.js'
-import { PageHeader, Badge, Empty } from './ui.jsx'
+import { dueLabel, isDue, isOverdue } from '../lib/dates.js'
+import { PageHeader, Badge, Empty, FollowUpPicker } from './ui.jsx'
 import { Icon } from './Icon.jsx'
 import Notes from './Notes.jsx'
 import Photos from './Photos.jsx'
@@ -23,6 +24,7 @@ export default function ContactDetail() {
   const nav = useNavigate()
   const [tab, setTab] = useState(() => sessionStorageGet('tab-' + id) || 'info')
   const [busy, setBusy] = useState(false)
+  const [editFollow, setEditFollow] = useState(false)
   const c = contacts.find((x) => x.id === id)
 
   if (!c) {
@@ -52,6 +54,19 @@ export default function ContactDetail() {
     if (error) return showToast(error.message)
     upsertContact(data)
     showToast(next === 'client' ? 'Converted to client 🎉' : next === 'lost' ? 'Marked as lost' : 'Moved back to leads')
+  }
+
+  async function saveFollowUp(value) {
+    const { data, error } = await supabase
+      .from('contacts')
+      .update({ follow_up_at: value })
+      .eq('id', c.id)
+      .select()
+      .single()
+    if (error) return showToast(error.message)
+    upsertContact(data)
+    setEditFollow(false)
+    showToast(value ? 'Follow-up set for ' + dueLabel(value) : 'Follow-up marked done')
   }
 
   async function del() {
@@ -111,6 +126,36 @@ export default function ContactDetail() {
       <div className="page-body">
         {tab === 'info' && (
           <>
+            {c.stage !== 'lost' && (
+              <div
+                className={
+                  'followup-card mb' +
+                  (isOverdue(c.follow_up_at) ? ' overdue' : isDue(c.follow_up_at) ? ' due' : '')
+                }
+              >
+                <div className="row between gap-sm">
+                  <div>
+                    <div className="label">Next follow-up</div>
+                    <b>{c.follow_up_at ? dueLabel(c.follow_up_at) : 'None set'}</b>
+                  </div>
+                  <div className="row gap-sm">
+                    {c.follow_up_at && !editFollow && (
+                      <button className="btn sm" onClick={() => saveFollowUp(null)}>
+                        <Icon name="check" size={14} /> Done
+                      </button>
+                    )}
+                    <button className="btn sm" onClick={() => setEditFollow((v) => !v)}>
+                      {editFollow ? 'Cancel' : c.follow_up_at ? 'Change' : 'Set'}
+                    </button>
+                  </div>
+                </div>
+                {editFollow && (
+                  <div className="mt-sm">
+                    <FollowUpPicker value={c.follow_up_at} onChange={saveFollowUp} />
+                  </div>
+                )}
+              </div>
+            )}
             <div className="card info-card">
               <InfoRow label="Phone" value={c.phone} />
               <InfoRow label="Email" value={c.email} />
@@ -118,6 +163,7 @@ export default function ContactDetail() {
               <InfoRow label="Interested in" value={c.services?.join(', ')} />
               <InfoRow label="Budget" value={c.budget} />
               <InfoRow label="Best time" value={c.best_time} />
+              <InfoRow label="Source" value={c.source} />
               <InfoRow label="Added" value={`${fmtDate(c.created_at)} by ${nameOf(c.created_by)}`} />
               {c.converted_at && <InfoRow label="Client since" value={fmtDate(c.converted_at)} />}
               {door && <InfoRow label="Door status" value="Pinned on the map" />}

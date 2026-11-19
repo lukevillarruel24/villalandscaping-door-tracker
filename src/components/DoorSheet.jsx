@@ -4,29 +4,40 @@ import { supabase } from '../lib/supabase.js'
 import { useStore } from '../lib/store.jsx'
 import { STATUS_BY_KEY } from '../lib/constants.js'
 import { fmtDateTime, timeAgo, directionsHref } from '../lib/format.js'
-import { Sheet, StatusPicker, Badge } from './ui.jsx'
+import { dueLabel, followUpChoices, isDue, isOverdue } from '../lib/dates.js'
+import { enqueue, isNetworkError } from '../lib/offline.js'
+import { Sheet, StatusPicker, Badge, FollowUpPicker } from './ui.jsx'
 import { Icon } from './Icon.jsx'
 
 export default function DoorSheet({ door, onClose }) {
-  const { contacts, upsertDoor, removeDoor, showToast, nameOf, userId } = useStore()
+  const { contacts, upsertDoor, removeDoor, showToast, nameOf, userId, markKnockedToday, queue } = useStore()
   const nav = useNavigate()
   const [visits, setVisits] = useState(null)
   const [status, setStatus] = useState(null)
+  const [followUp, setFollowUp] = useState(null)
   const [note, setNote] = useState('')
   const [editAddr, setEditAddr] = useState(false)
+  const [editFollow, setEditFollow] = useState(false)
   const [address, setAddress] = useState(door.address || '')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
   const contact = contacts.find((c) => c.id === door.contact_id || c.door_id === door.id)
   const s = STATUS_BY_KEY[door.status]
+  const queuedVisits = queue.filter((q) => q.visit?.door_id === door.id).map((q) => ({ ...q.visit, _pending: true }))
+  const allVisits = [...queuedVisits.filter((q) => !(visits || []).some((v) => v.id === q.id)), ...(visits || [])]
 
   useEffect(() => {
     setAddress(door.address || '')
     setStatus(null)
     setNote('')
     setEditAddr(false)
+    setEditFollow(false)
     let alive = true
+    if (door._pending && !door.created_at) {
+      setVisits([])
+      return
+    }
     supabase
       .from('visits')
       .select('*')
@@ -38,6 +49,13 @@ export default function DoorSheet({ door, onClose }) {
     }
   }, [door.id])
 
+  function pickStatus(k) {
+    setStatus(k)
+    setErr('')
+    if (k === 'come_back') setFollowUp(followUpChoices()[0].date.toISOString())
+    else setFollowUp(null)
+  }
+
   async function logKnock() {
     if (!status) {
       setErr('Pick what happened this time.')
@@ -45,28 +63,65 @@ export default function DoorSheet({ door, onClose }) {
     }
     setBusy(true)
     setErr('')
-    const v = await supabase
-      .from('visits')
-      .insert({ door_id: door.id, status, note: note.trim() || null, created_by: userId })
-      .select()
-      .single()
-    const d = await supabase
-      .from('doors')
-      .update({ status, updated_by: userId })
-      .eq('id', door.id)
-      .select()
-      .single()
-    setBusy(false)
-    if (v.error || d.error) {
-      setErr((v.error || d.error).message)
+    const now = new Date().toISOString()
+    const visit = {
+      id: crypto.randomUUID(),
+      door_id: door.id,
+      status,
+      note: note.trim() || null,
+      created_by: userId,
+      created_at: now,
+    }
+    const patch = { status, updated_by: userId, follow_up_at: status === 'come_back' ? followUp : null }
+
+    // This pin itself is still waiting to upload, so the knock has to wait too
+    if (queue.some((q) => q.type === 'door' && q.door.id === door.id)) {
+      enqueue({ type: 'knock', visit, patch })
+      markKnockedToday(door.id)
+      setBusy(false)
+      setStatus(null)
+      setNote('')
+      showToast('Saved on your phone, will upload with the pin.')
       return
     }
+
+    const v = await supabase.from('visits').insert(visit)
+    if (v.error && isNetworkError(v.error)) {
+      enqueue({ type: 'knock', visit, patch })
+      markKnockedToday(door.id)
+      setBusy(false)
+      setStatus(null)
+      setNote('')
+      showToast('No signal. Saved on your phone, will upload automatically.')
+      return
+    }
+    if (v.error) {
+      setBusy(false)
+      return setErr(v.error.message)
+    }
+    const d = await supabase.from('doors').update(patch).eq('id', door.id).select().single()
+    setBusy(false)
+    if (d.error) return setErr(d.error.message)
     upsertDoor(d.data)
-    setVisits((list) => [v.data, ...(list || [])])
+    markKnockedToday(door.id)
+    setVisits((list) => [visit, ...(list || [])])
     setStatus(null)
     setNote('')
     showToast('Knock logged')
     if (status === 'lead' && !contact) nav(`/contacts/new?door=${door.id}`)
+  }
+
+  async function saveFollowUp(value) {
+    const { data, error } = await supabase
+      .from('doors')
+      .update({ follow_up_at: value })
+      .eq('id', door.id)
+      .select()
+      .single()
+    if (error) return setErr(error.message)
+    upsertDoor(data)
+    setEditFollow(false)
+    showToast(value ? 'Revisit rescheduled' : 'Revisit cleared')
   }
 
   async function saveAddress() {
@@ -90,6 +145,9 @@ export default function DoorSheet({ door, onClose }) {
     onClose()
   }
 
+  const knocks = allVisits.length
+  const due = door.status === 'come_back' && door.follow_up_at
+
   return (
     <Sheet
       title={
@@ -98,6 +156,7 @@ export default function DoorSheet({ door, onClose }) {
           <span className="muted small">
             {timeAgo(door.updated_at)} · {nameOf(door.updated_by || door.created_by)}
           </span>
+          {door._pending && <span className="badge pending">Waiting to upload</span>}
         </div>
       }
       onClose={onClose}
@@ -112,22 +171,53 @@ export default function DoorSheet({ door, onClose }) {
       ) : (
         <div className="door-addr">
           <h3>{door.address || 'No address'}</h3>
-          <button className="icon-btn sm" onClick={() => setEditAddr(true)} aria-label="Edit address">
-            <Icon name="edit" size={16} />
-          </button>
+          {!door._pending && (
+            <button className="icon-btn sm" onClick={() => setEditAddr(true)} aria-label="Edit address">
+              <Icon name="edit" size={16} />
+            </button>
+          )}
+        </div>
+      )}
+      {visits !== null && (
+        <div className="small muted">
+          Knocked {knocks} {knocks === 1 ? 'time' : 'times'}
+          {knocks > 0 && ` · first ${fmtDateTime(allVisits[allVisits.length - 1].created_at)}`}
         </div>
       )}
 
-      <div className="row gap-sm wrap mt">
+      {due && (
+        <div className={'followup-card' + (isOverdue(door.follow_up_at) ? ' overdue' : isDue(door.follow_up_at) ? ' due' : '')}>
+          <div className="row between gap-sm">
+            <div>
+              <div className="label">Come back</div>
+              <b>{dueLabel(door.follow_up_at)}</b>
+            </div>
+            {!door._pending && (
+              <button className="btn sm" onClick={() => setEditFollow((v) => !v)}>
+                {editFollow ? 'Cancel' : 'Change'}
+              </button>
+            )}
+          </div>
+          {editFollow && (
+            <div className="mt-sm">
+              <FollowUpPicker value={door.follow_up_at} onChange={saveFollowUp} />
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="row gap-sm wrap">
         {contact ? (
           <button className="btn primary" onClick={() => nav(`/contacts/${contact.id}`)}>
             <Icon name={contact.stage === 'client' ? 'briefcase' : 'star'} size={16} />
             Open {contact.stage === 'client' ? 'client' : 'lead'}: {contact.name}
           </button>
         ) : (
-          <button className="btn primary" onClick={() => nav(`/contacts/new?door=${door.id}`)}>
-            <Icon name="star" size={16} /> Make this a lead
-          </button>
+          !door._pending && (
+            <button className="btn primary" onClick={() => nav(`/contacts/new?door=${door.id}`)}>
+              <Icon name="star" size={16} /> Make this a lead
+            </button>
+          )
         )}
         <a className="btn" href={directionsHref(door)} target="_blank" rel="noreferrer">
           <Icon name="nav" size={16} /> Directions
@@ -136,7 +226,13 @@ export default function DoorSheet({ door, onClose }) {
 
       <div className="section">
         <div className="section-title">Log another knock</div>
-        <StatusPicker value={status} onChange={setStatus} disabled={busy} />
+        <StatusPicker value={status} onChange={pickStatus} disabled={busy} />
+        {status === 'come_back' && (
+          <div className="field mt-sm">
+            <span>When should we come back?</span>
+            <FollowUpPicker value={followUp} onChange={setFollowUp} allowClear={false} />
+          </div>
+        )}
         {status && (
           <>
             <textarea
@@ -159,24 +255,27 @@ export default function DoorSheet({ door, onClose }) {
           <Icon name="history" size={16} /> History
         </div>
         {visits === null && <div className="muted small">Loading…</div>}
-        {visits?.length === 0 && door.notes && <div className="visit">{door.notes}</div>}
-        {visits?.map((v) => (
+        {visits !== null && knocks === 0 && door.notes && <div className="visit">{door.notes}</div>}
+        {allVisits.map((v) => (
           <div key={v.id} className="visit">
-            <div className="row gap-sm">
+            <div className="row gap-sm wrap">
               <span className="dot" style={{ background: STATUS_BY_KEY[v.status]?.color }} />
               <b>{STATUS_BY_KEY[v.status]?.label}</b>
               <span className="muted small">
                 {fmtDateTime(v.created_at)} · {nameOf(v.created_by)}
               </span>
+              {v._pending && <span className="badge pending">Waiting to upload</span>}
             </div>
             {v.note && <div className="visit-note">{v.note}</div>}
           </div>
         ))}
       </div>
 
-      <button className="btn danger-link mt" onClick={del}>
-        <Icon name="trash" size={16} /> Delete pin
-      </button>
+      {!door._pending && (
+        <button className="btn danger-link mt" onClick={del}>
+          <Icon name="trash" size={16} /> Delete pin
+        </button>
+      )}
     </Sheet>
   )
 }

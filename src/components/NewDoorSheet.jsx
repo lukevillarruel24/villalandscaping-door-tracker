@@ -3,20 +3,24 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useStore } from '../lib/store.jsx'
 import { reverseGeocode, distanceM } from '../lib/geo.js'
-import { Sheet, StatusPicker } from './ui.jsx'
+import { enqueue, isNetworkError } from '../lib/offline.js'
+import { followUpChoices } from '../lib/dates.js'
+import { Sheet, StatusPicker, FollowUpPicker } from './ui.jsx'
+import { Icon } from './Icon.jsx'
 
-export default function NewDoorSheet({ pin, onClose, onOpenExisting }) {
-  const { doors, upsertDoor, showToast, userId } = useStore()
+export default function NewDoorSheet({ pin, onClose, onOpenExisting, onSavedNext }) {
+  const { doors, upsertDoor, showToast, userId, markKnockedToday } = useStore()
   const nav = useNavigate()
   const [address, setAddress] = useState('')
   const [looking, setLooking] = useState(true)
   const [options, setOptions] = useState([])
   const [noNumber, setNoNumber] = useState(false)
-  const addrRef = useRef()
   const [status, setStatus] = useState(null)
+  const [followUp, setFollowUp] = useState(null)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const addrRef = useRef()
 
   useEffect(() => {
     let alive = true
@@ -42,51 +46,104 @@ export default function NewDoorSheet({ pin, onClose, onOpenExisting }) {
     return best
   }, [doors, pin.lat, pin.lng])
 
-  async function save() {
+  function pickStatus(s) {
+    setStatus(s)
+    setErr('')
+    // Come Back Later defaults to "later today" so it's never forgotten
+    if (s === 'come_back' && !followUp) setFollowUp(followUpChoices()[0].date.toISOString())
+    if (s !== 'come_back') setFollowUp(null)
+  }
+
+  async function save(next) {
     if (!status) {
       setErr('Pick what happened at the door.')
       return
     }
     setBusy(true)
     setErr('')
-    const { data: door, error } = await supabase
-      .from('doors')
-      .insert({
-        lat: pin.lat,
-        lng: pin.lng,
-        address: address.trim() || null,
-        status,
-        notes: note.trim() || null,
-        created_by: userId,
-        updated_by: userId,
-      })
-      .select()
-      .single()
+    const now = new Date().toISOString()
+    const door = {
+      id: crypto.randomUUID(),
+      lat: pin.lat,
+      lng: pin.lng,
+      address: address.trim() || null,
+      status,
+      notes: note.trim() || null,
+      follow_up_at: status === 'come_back' ? followUp : null,
+      created_by: userId,
+      updated_by: userId,
+      created_at: now,
+      updated_at: now,
+    }
+    const visit = {
+      id: crypto.randomUUID(),
+      door_id: door.id,
+      status,
+      note: note.trim() || null,
+      created_by: userId,
+      created_at: now,
+    }
+
+    const { data, error } = await supabase.from('doors').insert(door).select().single()
     if (error) {
-      setErr(error.message)
       setBusy(false)
+      if (isNetworkError(error)) {
+        enqueue({ type: 'door', door, visit })
+        markKnockedToday(door.id)
+        showToast(
+          status === 'lead'
+            ? 'No signal. Pin saved on your phone. Add the lead info once you have signal.'
+            : 'No signal. Saved on your phone, will upload automatically.',
+        )
+        onClose()
+        if (next) onSavedNext?.()
+        return
+      }
+      setErr(error.message)
       return
     }
-    await supabase.from('visits').insert({ door_id: door.id, status, note: note.trim() || null, created_by: userId })
-    upsertDoor(door)
+    const v = await supabase.from('visits').insert(visit)
+    if (v.error && isNetworkError(v.error)) enqueue({ type: 'knock', visit, patch: { status } })
+    upsertDoor(data)
+    markKnockedToday(data.id)
     setBusy(false)
     onClose()
     if (status === 'lead') {
       showToast('Pin saved. Add the lead details.')
-      nav(`/contacts/new?door=${door.id}`)
+      nav(`/contacts/new?door=${data.id}`)
+    } else if (next) {
+      showToast('Saved. Drop the next one.')
+      onSavedNext?.()
     } else {
       showToast('Pin saved')
     }
   }
+
+  const isLead = status === 'lead'
 
   return (
     <Sheet
       title="New door"
       onClose={onClose}
       footer={
-        <button className="btn primary block" onClick={save} disabled={busy}>
-          {busy ? 'Saving…' : status === 'lead' ? 'Save and add lead info' : 'Save pin'}
-        </button>
+        isLead ? (
+          <button className="btn primary block" onClick={() => save(false)} disabled={busy}>
+            {busy ? 'Saving…' : 'Save and add lead info'}
+          </button>
+        ) : (
+          <div className="row gap-sm">
+            <button className="btn" onClick={() => save(false)} disabled={busy}>
+              Save
+            </button>
+            <button className="btn primary grow" onClick={() => save(true)} disabled={busy}>
+              {busy ? 'Saving…' : (
+                <>
+                  Save + next door <Icon name="plus" size={16} stroke={2.6} />
+                </>
+              )}
+            </button>
+          </div>
+        )
       }
     >
       {nearby && (
@@ -148,8 +205,14 @@ export default function NewDoorSheet({ pin, onClose, onOpenExisting }) {
       )}
       <div className="field">
         <span>What happened?</span>
-        <StatusPicker value={status} onChange={setStatus} />
+        <StatusPicker value={status} onChange={pickStatus} />
       </div>
+      {status === 'come_back' && (
+        <div className="field">
+          <span>When should we come back?</span>
+          <FollowUpPicker value={followUp} onChange={setFollowUp} allowClear={false} />
+        </div>
+      )}
       <label className="field">
         <span>Note (optional)</span>
         <textarea

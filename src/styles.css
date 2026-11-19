@@ -374,3 +374,76 @@ textarea { resize: vertical; }
   .tiles { grid-template-columns: repeat(4, 1fr); }
   .sheet { max-width: 520px; width: 100%; margin: 0 auto; }
 }
+
+/* ================= Update 2 ================= */
+.mb { margin-bottom: 12px; }
+.filter-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+
+/* map: goal + legend row */
+.map-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.map-chips .legend { align-self: auto; border: none; font: inherit; font-size: 12px; font-weight: 700; color: var(--ink); }
+button.legend { cursor: pointer; }
+.legend.on { background: var(--green); color: #fff; }
+.legend.warn { background: #fff4d6; color: #8a5a00; }
+.goal-pill {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px;
+  background: rgba(255,255,255,.95); border-radius: 99px; box-shadow: 0 1px 6px rgba(0,0,0,.12);
+  font-size: 12px; color: var(--ink);
+}
+.goal-track { width: 54px; height: 6px; border-radius: 3px; background: #e6e3db; overflow: hidden; }
+.goal-fill { display: block; height: 100%; background: var(--green-2); border-radius: 3px; transition: width .3s; }
+.pending-bar {
+  position: absolute; z-index: 520; left: 10px; right: 10px; bottom: 80px;
+  background: #fff4d6; color: #6b4600; border: 1px solid #f0d58a; border-radius: 12px;
+  padding: 10px 12px; font: inherit; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer;
+}
+.badge.pending { --c: #b45309; }
+
+/* follow-ups */
+.followup .chip-row { margin-top: 2px; }
+.followup-card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.followup-card.due { background: #fff8e6; border-color: #f0d58a; }
+.followup-card.overdue { background: #fdecec; border-color: #f2b8b8; }
+.due-card { padding: 4px 0; margin-bottom: 12px; border-color: #f0d58a; background: #fffaf0; }
+.due-head { display: flex; align-items: center; gap: 8px; padding: 8px 14px 6px; color: #8a5a00; }
+.due-row {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid #f3e7c6;
+  color: inherit; text-decoration: none; font-size: 15px;
+}
+.due-row.as-btn { width: 100%; background: none; border-left: none; border-right: none; border-bottom: none; font: inherit; text-align: left; cursor: pointer; }
+.due-when { font-size: 13px; font-weight: 700; color: #8a5a00; white-space: nowrap; }
+.due-when.overdue { color: var(--danger); }
+.fu-chip { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: #eef2f6; color: #475569; }
+.fu-chip.due { background: #fff1c7; color: #8a5a00; }
+.fu-chip.overdue { background: #fde2e2; color: var(--danger); }
+.list-tools { margin-top: 8px; }
+.list-tools .check-row { margin: 0; }
+.sort-select { width: auto; padding: 7px 10px; font-size: 14px; }
+
+/* nav badge */
+.tab-icon { position: relative; display: inline-flex; }
+.tab-badge {
+  position: absolute; top: -5px; right: -10px; min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 9px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 800;
+  display: grid; place-items: center; border: 2px solid #fff;
+}
+
+/* stats */
+.stats-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tiles { grid-template-columns: 1fr 1fr; }
+.stat-table tr.clickable { cursor: pointer; }
+.stat-table tr.clickable:active td { background: #f6f4ee; }
+.chart-card { padding: 12px 12px 8px; }
+.chart-readout { min-height: 20px; margin-bottom: 8px; }
+.chart { position: relative; height: 150px; margin-left: 26px; }
+.chart-gridline { position: absolute; left: 0; right: 0; border-top: 1px solid #efede7; }
+.chart-gridline span { position: absolute; left: -26px; top: -8px; width: 22px; text-align: right; font-size: 10px; color: var(--muted); }
+.chart-bars { position: absolute; inset: 0; display: flex; align-items: flex-end; gap: 2px; border-bottom: 1px solid #d9d6ce; }
+.chart-col { flex: 1; height: 100%; display: flex; align-items: flex-end; justify-content: center; background: none; border: none; padding: 0; cursor: pointer; min-width: 0; }
+.chart-bar { display: block; width: 100%; max-width: 28px; min-height: 0; background: var(--green-2); border-radius: 4px 4px 0 0; }
+.chart-col.on .chart-bar { background: var(--green); }
+.chart-col.on { background: rgba(31,77,46,.06); }
+.chart-axis { display: flex; gap: 2px; margin-left: 26px; margin-top: 4px; }
+.chart-axis span { flex: 1; min-width: 0; font-size: 10px; color: var(--muted); white-space: nowrap; overflow: visible; }
+@media (min-width: 700px) { .tiles { grid-template-columns: repeat(3, 1fr); } }
+.view-day { margin-left: 8px; font-weight: 700; }

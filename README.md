@@ -17,6 +17,8 @@ Door-to-door lead tracker for Villa Landscaping. Your rep pins every house he kn
 6. Go to **Authentication → Users → Add user → Create new user** for yourself and your rep. Give each a temporary password and check **Auto Confirm User**.
 7. Go to **Authentication → URL Configuration** and set **Site URL** to your Vercel link (step 3 below). That makes "Forgot password" emails work.
 
+> **Already set up before update 2?** Run [`supabase/update-2.sql`](supabase/update-2.sql) once in the SQL Editor. (Fresh installs get it inside `setup.sql`.)
+
 ### 2. Connect the app to Supabase
 In **Project Settings → API** (or **Data API**), copy the **Project URL** and the **anon / publishable** key into `src/config.js`.
 Never put the `service_role` / secret key in this app.
@@ -54,7 +56,24 @@ Allow location when it asks, so the map can show where you are.
 | **Stats** | Doors knocked, leads, clients and won $ for today / this week / this month, broken down by person. |
 | **Me** | Your name, password, team list, sign out. |
 
-**Door statuses:** 🟢 Lead · 🟠 Maybe · 🔵 Come Back Later · ⚪ Not Home · 🔴 Not Interested
+**Door statuses:** 🟢 Lead · 🟠 Maybe · 🔵 Come Back Later · ⚪ Not Home · 🔴 Not Interested · ⚫ No Soliciting
+
+**In the field**
+- **Save + next door** saves the pin and drops you straight into placing the next one.
+- **Come Back Later** asks when (later today, tomorrow, Saturday, next week, or a date). Pins due for a revisit get an orange ring (red if overdue).
+- The bar at the top shows **doors you've knocked today vs. the daily goal** (set the goal under Me).
+- **No signal?** Knocks are saved on the phone (dashed pins) and upload automatically when signal returns.
+- Filter the map by status, by person, by date, or to **Come back** pins only.
+
+**Follow-ups**
+- Leads have a **Next follow-up** date. Anything due today or overdue shows at the top of **Leads**, and the Leads tab gets a red badge.
+- Each lead records **how they found us** (door knock, referral, yard sign, ads, website, repeat customer).
+
+**Stats**
+- Pick any range (today, yesterday, this/last week, this month, last 30 days, all time, or custom dates) and any person.
+- **Daily log:** each day's doors, leads, first and last knock, time out, and doors per hour. Tap a day to zoom in.
+- Doors-per-day chart (knocks-by-hour for a single day), results at the door, lead sources.
+- **Download CSV** of knocks or of all leads and clients, to open in Excel or Google Sheets.
 
 **Estimates:** Add line items (qty × price), pick from common items, set tax %. The total updates as you type. Tap the printer icon for a clean estimate you can print or save as a PDF to text or email.
 

@@ -4,12 +4,27 @@ import { useStore } from '../lib/store.jsx'
 import { PageHeader } from './ui.jsx'
 
 export default function Account() {
-  const { session, me, profiles, upsertProfile, showToast, userId } = useStore()
+  const { session, me, profiles, upsertProfile, showToast, userId, dailyGoal, setSetting, queue, syncNow } = useStore()
   const [name, setName] = useState(me?.full_name || '')
+  const [goal, setGoal] = useState(String(dailyGoal))
   const [pw, setPw] = useState('')
   const [team, setTeam] = useState([])
 
   useEffect(() => setName(me?.full_name || ''), [me?.full_name])
+  useEffect(() => setGoal(String(dailyGoal)), [dailyGoal])
+
+  async function saveGoal(e) {
+    e.preventDefault()
+    const n = Math.round(Number(goal))
+    if (!n || n < 1 || n > 1000) return showToast('Enter a number from 1 to 1000')
+    const value = { doors: n }
+    const { error } = await supabase
+      .from('settings')
+      .upsert({ key: 'daily_goal', value, updated_by: userId, updated_at: new Date().toISOString() })
+    if (error) return showToast(error.message)
+    setSetting('daily_goal', value)
+    showToast(`Daily goal set to ${n} doors`)
+  }
   useEffect(() => {
     supabase
       .from('team_members')
@@ -56,6 +71,32 @@ export default function Account() {
             Save name
           </button>
         </form>
+
+        <form className="card pad stack-sm" onSubmit={saveGoal}>
+          <label className="field">
+            <span>Daily door goal (for everyone on the team)</span>
+            <input type="number" inputMode="numeric" min="1" max="1000" value={goal} onChange={(e) => setGoal(e.target.value)} />
+          </label>
+          <p className="tiny muted">Shows as a progress bar on the map, like "23/50 today".</p>
+          <button className="btn" disabled={String(dailyGoal) === goal}>
+            Save goal
+          </button>
+        </form>
+
+        {queue.length > 0 && (
+          <div className="card pad stack-sm">
+            <b>
+              {queue.length} {queue.length === 1 ? 'knock' : 'knocks'} waiting to upload
+            </b>
+            <p className="small muted">
+              These were saved on this phone while there was no signal. They upload automatically; you can also try now.
+              {queue[0]?.lastError ? ` Last problem: ${queue[0].lastError}` : ''}
+            </p>
+            <button className="btn" onClick={syncNow}>
+              Upload now
+            </button>
+          </div>
+        )}
 
         <form className="card pad stack-sm" onSubmit={savePw}>
           <label className="field">

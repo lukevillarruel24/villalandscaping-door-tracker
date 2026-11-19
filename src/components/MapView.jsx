@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { MapContainer, TileLayer, CircleMarker, Circle, useMapEvents } from 'react-leaflet'
 import { useStore } from '../lib/store.jsx'
 import { STATUSES, STATUS_BY_KEY } from '../lib/constants.js'
 import { DEFAULT_CENTER } from '../config.js'
 import { searchAddress } from '../lib/geo.js'
+import { isDue, isOverdue } from '../lib/dates.js'
 import { Icon } from './Icon.jsx'
 import DoorSheet from './DoorSheet.jsx'
 import NewDoorSheet from './NewDoorSheet.jsx'
@@ -28,7 +30,8 @@ function rangeStart(key) {
 }
 
 export default function MapView() {
-  const { doors } = useStore()
+  const { doors, profiles, userId, nameOf, knockedToday, dailyGoal, queue, due, syncNow } = useStore()
+  const [params, setParams] = useSearchParams()
   const [map, setMap] = useState(null)
   const [me, setMe] = useState(lastFix)
   const [gpsError, setGpsError] = useState('')
@@ -37,10 +40,23 @@ export default function MapView() {
   const [newPin, setNewPin] = useState(null)
   const [hidden, setHidden] = useState(() => new Set())
   const [range, setRange] = useState('all')
+  const [who, setWho] = useState('all')
+  const [revisitsOnly, setRevisitsOnly] = useState(params.get('revisits') === '1')
   const [showFilters, setShowFilters] = useState(false)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null)
   const centeredOnce = useRef(!!savedView)
+  const meRef = useRef(me)
+  meRef.current = me
+
+  // Opened from the Leads tab with ?revisits=1
+  useEffect(() => {
+    if (params.get('revisits') === '1') {
+      setRevisitsOnly(true)
+      params.delete('revisits')
+      setParams(params, { replace: true })
+    }
+  }, [params])
 
   // GPS
   useEffect(() => {
@@ -76,22 +92,28 @@ export default function MapView() {
   }, [map, me])
 
   const since = rangeStart(range)
+  const people = useMemo(() => Object.values(profiles), [profiles])
+  const whoOf = (d) => d.updated_by || d.created_by
+
+  const inScope = (d) =>
+    (since === 0 || new Date(d.updated_at).getTime() >= since) && (who === 'all' || whoOf(d) === who)
+
   const visible = useMemo(
     () =>
-      doors.filter(
-        (d) => !hidden.has(d.status) && (since === 0 || new Date(d.updated_at).getTime() >= since),
-      ),
-    [doors, hidden, since],
+      doors.filter((d) => {
+        if (revisitsOnly) return d.status === 'come_back' && inScope(d)
+        return !hidden.has(d.status) && inScope(d)
+      }),
+    [doors, hidden, since, who, revisitsOnly],
   )
   const counts = useMemo(() => {
     const c = {}
-    for (const d of doors) {
-      if (since === 0 || new Date(d.updated_at).getTime() >= since) c[d.status] = (c[d.status] || 0) + 1
-    }
+    for (const d of doors) if (inScope(d)) c[d.status] = (c[d.status] || 0) + 1
     return c
-  }, [doors, since])
+  }, [doors, since, who])
 
   const selected = doors.find((d) => d.id === selectedId)
+  const filtersOn = hidden.size > 0 || range !== 'all' || who !== 'all' || revisitsOnly
 
   function locate() {
     if (me && map) map.flyTo([me.lat, me.lng], Math.max(map.getZoom(), 18), { duration: 0.6 })
@@ -101,7 +123,8 @@ export default function MapView() {
     setSelectedId(null)
     setResults(null)
     setPlacing(true)
-    if (me && map) map.setView([me.lat, me.lng], Math.max(map.getZoom(), 19))
+    const fix = meRef.current
+    if (fix && map) map.setView([fix.lat, fix.lng], Math.max(map.getZoom(), 19))
   }
 
   function dropPin() {
@@ -127,6 +150,15 @@ export default function MapView() {
     })
   }
 
+  function clearFilters() {
+    setHidden(new Set())
+    setRange('all')
+    setWho('all')
+    setRevisitsOnly(false)
+  }
+
+  const goalPct = Math.min(100, Math.round((knockedToday / Math.max(1, dailyGoal)) * 100))
+
   return (
     <div className="map-page">
       <MapContainer
@@ -144,20 +176,25 @@ export default function MapView() {
           maxZoom={20}
         />
         <ViewSaver />
-        {visible.map((d) => (
-          <CircleMarker
-            key={d.id}
-            center={[d.lat, d.lng]}
-            radius={d.id === selectedId ? 13 : 10}
-            pathOptions={{
-              color: '#fff',
-              weight: d.id === selectedId ? 4 : 2.5,
-              fillColor: STATUS_BY_KEY[d.status]?.color || '#666',
-              fillOpacity: 1,
-            }}
-            eventHandlers={{ click: () => !placing && setSelectedId(d.id) }}
-          />
-        ))}
+        {visible.map((d) => {
+          const isSel = d.id === selectedId
+          const dueNow = d.status === 'come_back' && isDue(d.follow_up_at)
+          return (
+            <CircleMarker
+              key={d.id}
+              center={[d.lat, d.lng]}
+              radius={isSel ? 13 : 10}
+              pathOptions={{
+                color: dueNow ? (isOverdue(d.follow_up_at) ? '#dc2626' : '#f59e0b') : '#fff',
+                weight: isSel ? 4 : dueNow ? 3.5 : 2.5,
+                dashArray: d._pending ? '3 3' : null,
+                fillColor: STATUS_BY_KEY[d.status]?.color || '#666',
+                fillOpacity: d._pending ? 0.7 : 1,
+              }}
+              eventHandlers={{ click: () => !placing && setSelectedId(d.id) }}
+            />
+          )
+        })}
         {me && (
           <>
             {me.acc < 200 && (
@@ -207,7 +244,7 @@ export default function MapView() {
             )}
             <button
               type="button"
-              className={'icon-btn sm' + (showFilters ? ' on' : '')}
+              className={'icon-btn sm' + (showFilters || filtersOn ? ' on' : '')}
               onClick={() => setShowFilters((v) => !v)}
               aria-label="Filters"
             >
@@ -237,19 +274,46 @@ export default function MapView() {
 
           {showFilters && (
             <div className="filter-panel card">
+              <div className="filter-label">Show</div>
+              <div className="seg">
+                <button className={'seg-btn' + (!revisitsOnly ? ' on' : '')} onClick={() => setRevisitsOnly(false)}>
+                  All pins
+                </button>
+                <button className={'seg-btn' + (revisitsOnly ? ' on' : '')} onClick={() => setRevisitsOnly(true)}>
+                  Come back ({doors.filter((d) => d.status === 'come_back').length})
+                </button>
+              </div>
+              {!revisitsOnly && (
+                <div className="chip-row">
+                  {STATUSES.map((s) => (
+                    <button
+                      key={s.key}
+                      className={'chip' + (hidden.has(s.key) ? ' off' : '')}
+                      style={{ '--c': s.color }}
+                      onClick={() => toggleStatus(s.key)}
+                    >
+                      <span className="dot" />
+                      {s.label} <b>{counts[s.key] || 0}</b>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="filter-label">Who</div>
               <div className="chip-row">
-                {STATUSES.map((s) => (
+                <button className={'chip toggle' + (who === 'all' ? ' on' : '')} onClick={() => setWho('all')}>
+                  Everyone
+                </button>
+                {people.map((p) => (
                   <button
-                    key={s.key}
-                    className={'chip' + (hidden.has(s.key) ? ' off' : '')}
-                    style={{ '--c': s.color }}
-                    onClick={() => toggleStatus(s.key)}
+                    key={p.id}
+                    className={'chip toggle' + (who === p.id ? ' on' : '')}
+                    onClick={() => setWho(p.id)}
                   >
-                    <span className="dot" />
-                    {s.label} <b>{counts[s.key] || 0}</b>
+                    {p.id === userId ? 'Me' : p.full_name || nameOf(p.id)}
                   </button>
                 ))}
               </div>
+              <div className="filter-label">When</div>
               <select value={range} onChange={(e) => setRange(e.target.value)}>
                 {RANGES.map((r) => (
                   <option key={r.key} value={r.key}>
@@ -257,20 +321,52 @@ export default function MapView() {
                   </option>
                 ))}
               </select>
+              {filtersOn && (
+                <button className="btn link" onClick={clearFilters}>
+                  Clear filters
+                </button>
+              )}
             </div>
           )}
 
           {!showFilters && !results && (
-            <div className="legend">
-              {STATUSES.map((s) => (
-                <span key={s.key} className={hidden.has(s.key) ? 'off' : ''}>
-                  <i style={{ background: s.color }} />
-                  {counts[s.key] || 0}
+            <div className="map-chips">
+              <div className="goal-pill" title="Doors you've knocked today vs. the daily goal">
+                <span className="goal-text">
+                  <b>{knockedToday}</b>/{dailyGoal} today
                 </span>
-              ))}
+                <span className="goal-track">
+                  <span className="goal-fill" style={{ width: goalPct + '%' }} />
+                </span>
+              </div>
+              {revisitsOnly ? (
+                <button className="legend on" onClick={() => setRevisitsOnly(false)}>
+                  Come-back pins only ✕
+                </button>
+              ) : (
+                <div className="legend">
+                  {STATUSES.map((s) => (
+                    <span key={s.key} className={hidden.has(s.key) ? 'off' : ''}>
+                      <i style={{ background: s.color }} />
+                      {counts[s.key] || 0}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {due.revisits.length > 0 && !revisitsOnly && (
+                <button className="legend warn" onClick={() => setRevisitsOnly(true)}>
+                  {due.revisits.length} to revisit
+                </button>
+              )}
             </div>
           )}
         </div>
+      )}
+
+      {queue.length > 0 && !placing && (
+        <button className="pending-bar" onClick={syncNow}>
+          {queue.length} {queue.length === 1 ? 'knock' : 'knocks'} saved on this phone, waiting for signal. Tap to retry.
+        </button>
       )}
 
       {gpsError && !placing && <div className="gps-note">{gpsError}</div>}
@@ -317,6 +413,7 @@ export default function MapView() {
             setNewPin(null)
             setSelectedId(id)
           }}
+          onSavedNext={() => setTimeout(startPlacing, 50)}
         />
       )}
     </div>

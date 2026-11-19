@@ -2,10 +2,21 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useStore } from '../lib/store.jsx'
-import { SERVICES } from '../lib/constants.js'
-import { PageHeader } from './ui.jsx'
+import { SERVICES, SOURCES } from '../lib/constants.js'
+import { PageHeader, FollowUpPicker } from './ui.jsx'
 
-const EMPTY = { name: '', phone: '', email: '', address: '', services: [], budget: '', best_time: '', notes: '' }
+const EMPTY = {
+  name: '',
+  phone: '',
+  email: '',
+  address: '',
+  services: [],
+  budget: '',
+  best_time: '',
+  notes: '',
+  source: '',
+  follow_up_at: null,
+}
 
 export default function ContactForm() {
   const { id } = useParams()
@@ -26,7 +37,12 @@ export default function ContactForm() {
         ...Object.fromEntries(Object.keys(EMPTY).map((k) => [k, existing[k] ?? EMPTY[k]])),
       })
     } else if (door) {
-      setF((cur) => ({ ...cur, address: cur.address || door.address || '', notes: cur.notes || door.notes || '' }))
+      setF((cur) => ({
+        ...cur,
+        address: cur.address || door.address || '',
+        notes: cur.notes || door.notes || '',
+        source: cur.source || 'Door knock',
+      }))
     }
   }, [existing?.id, door?.id])
 
@@ -54,6 +70,8 @@ export default function ContactForm() {
       budget: f.budget.trim() || null,
       best_time: f.best_time.trim() || null,
       notes: f.notes.trim() || null,
+      source: f.source || null,
+      follow_up_at: f.follow_up_at || null,
     }
 
     if (existing) {
@@ -146,6 +164,25 @@ export default function ContactForm() {
             <span>Best time to call</span>
             <input value={f.best_time} onChange={set('best_time')} placeholder="Evenings" />
           </label>
+        </div>
+        <div className="field">
+          <span>How did they find us?</span>
+          <div className="chip-row">
+            {SOURCES.map((s) => (
+              <button
+                key={s}
+                type="button"
+                className={'chip toggle' + (f.source === s ? ' on' : '')}
+                onClick={() => setF((cur) => ({ ...cur, source: cur.source === s ? '' : s }))}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="field">
+          <span>Next follow-up (optional)</span>
+          <FollowUpPicker value={f.follow_up_at} onChange={(v) => setF((cur) => ({ ...cur, follow_up_at: v }))} />
         </div>
         <label className="field">
           <span>Notes</span>
