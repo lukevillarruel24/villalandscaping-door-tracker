@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useStore } from '../lib/store.jsx'
@@ -10,6 +10,9 @@ export default function NewDoorSheet({ pin, onClose, onOpenExisting }) {
   const nav = useNavigate()
   const [address, setAddress] = useState('')
   const [looking, setLooking] = useState(true)
+  const [options, setOptions] = useState([])
+  const [noNumber, setNoNumber] = useState(false)
+  const addrRef = useRef()
   const [status, setStatus] = useState(null)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -17,9 +20,11 @@ export default function NewDoorSheet({ pin, onClose, onOpenExisting }) {
 
   useEffect(() => {
     let alive = true
-    reverseGeocode(pin.lat, pin.lng).then((a) => {
+    reverseGeocode(pin.lat, pin.lng).then((r) => {
       if (!alive) return
-      setAddress((cur) => cur || a)
+      setAddress((cur) => cur || r.address)
+      setOptions(r.options || [])
+      setNoNumber(!!r.address && !r.hasNumber)
       setLooking(false)
     })
     return () => {
@@ -95,8 +100,52 @@ export default function NewDoorSheet({ pin, onClose, onOpenExisting }) {
       )}
       <label className="field">
         <span>Address {looking && <em className="muted">looking up…</em>}</span>
-        <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="123 Main St, Calhoun, GA" />
+        <input
+          ref={addrRef}
+          value={address}
+          onChange={(e) => {
+            setAddress(e.target.value)
+            setNoNumber(false)
+          }}
+          placeholder="123 Main St, Calhoun, GA"
+        />
       </label>
+      {noNumber && (
+        <div className="notice small">
+          No house number found for this spot. Add it from the mailbox.{' '}
+          <button
+            type="button"
+            className="btn link inline"
+            onClick={() => {
+              const el = addrRef.current
+              el.focus()
+              el.setSelectionRange(0, 0)
+            }}
+          >
+            Add number
+          </button>
+        </div>
+      )}
+      {options.length > 1 && (
+        <div className="field">
+          <span>Not the right house? Tap the correct one:</span>
+          <div className="chip-row">
+            {options.map((o) => (
+              <button
+                key={o.address}
+                type="button"
+                className={'chip toggle' + (o.address === address ? ' on' : '')}
+                onClick={() => {
+                  setAddress(o.address)
+                  setNoNumber(!o.hasNumber)
+                }}
+              >
+                {o.address.split(',')[0]}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="field">
         <span>What happened?</span>
         <StatusPicker value={status} onChange={setStatus} />

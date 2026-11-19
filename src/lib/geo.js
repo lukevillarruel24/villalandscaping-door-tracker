@@ -1,5 +1,8 @@
-// Address lookup uses OpenStreetMap's free Nominatim service.
-// Their rules: no more than about 1 request per second, so we only look up
+import { supabase } from './supabase.js'
+
+// Address lookup: Geocodio first (through /api/reverse), OpenStreetMap's free
+// Nominatim service as a backup and for the address search box.
+// Nominatim's rules: no more than about 1 request per second, so we only look up
 // when someone drops a pin or presses Search (never on every keystroke).
 
 let lastCall = 0
@@ -9,20 +12,65 @@ async function throttle() {
   lastCall = Date.now()
 }
 
+// Best address for a GPS point.
+// 1) Geocodio (house-level, through our own /api/reverse so the key stays private)
+// 2) OpenStreetMap as a backup
+// Returns { address, options: [{address, hasNumber}], hasNumber, source }
 export async function reverseGeocode(lat, lng) {
+  const g = await geocodioReverse(lat, lng)
+  if (g && g.options.length) {
+    const withNum = g.options.filter((o) => o.hasNumber)
+    const best = withNum[0] || g.options[0]
+    return {
+      address: best.address,
+      hasNumber: best.hasNumber,
+      options: (withNum.length ? withNum : g.options).slice(0, 5),
+      source: 'geocodio',
+    }
+  }
+  const osm = await osmReverse(lat, lng)
+  return {
+    address: osm.address,
+    hasNumber: osm.hasNumber,
+    options: osm.address ? [{ address: osm.address, hasNumber: osm.hasNumber }] : [],
+    source: 'osm',
+  }
+}
+
+async function geocodioReverse(lat, lng) {
+  try {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    if (!token) return null
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), 8000)
+    const res = await fetch(`/api/reverse?lat=${lat}&lng=${lng}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: ctrl.signal,
+    })
+    clearTimeout(t)
+    if (!res.ok) return null
+    const json = await res.json()
+    return Array.isArray(json.options) ? json : null
+  } catch {
+    return null
+  }
+}
+
+async function osmReverse(lat, lng) {
   try {
     await throttle()
     const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
     const res = await fetch(url, { headers: { Accept: 'application/json' } })
-    if (!res.ok) return ''
+    if (!res.ok) return { address: '', hasNumber: false }
     const data = await res.json()
     const a = data.address || {}
     const street = [a.house_number, a.road].filter(Boolean).join(' ')
     const town = a.city || a.town || a.village || a.hamlet || a.county || ''
     const line = [street, town, a.state ? stateAbbr(a.state) : ''].filter(Boolean).join(', ')
-    return line || data.display_name || ''
+    return { address: line || data.display_name || '', hasNumber: !!a.house_number }
   } catch {
-    return ''
+    return { address: '', hasNumber: false }
   }
 }
 

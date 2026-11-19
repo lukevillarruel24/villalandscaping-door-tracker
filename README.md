@@ -27,7 +27,15 @@ Never put the `service_role` / secret key in this app.
 3. Leave every setting as is (it detects Vite) and click **Deploy**.
 4. You'll get a link like `villalandscaping-door-tracker.vercel.app`. Every time code is pushed to GitHub, Vercel updates the app automatically.
 
-### 4. Put it on the phones
+### 4. House-number lookup (Geocodio)
+When a pin is dropped, the app looks up the address with [Geocodio](https://www.geocod.io) (free for 2,500 lookups a day, no card needed). If that's unavailable it falls back to OpenStreetMap.
+1. In Geocodio, create an API key with only the **GET /v2.1/geocode** permission.
+2. In Vercel: **Project → Settings → Environment Variables**, add `GEOCODIO_API_KEY` with the key as the value.
+3. Redeploy (Deployments → ⋯ → Redeploy), or push any change to GitHub.
+
+The key lives only on Vercel's server (`api/reverse.js`), never in the app on the phone, and only signed-in team members can use the lookup.
+
+### 5. Put it on the phones
 Open the link on each phone and sign in.
 - **iPhone (Safari):** Share button → **Add to Home Screen**
 - **Android (Chrome):** ⋮ menu → **Add to Home screen** / **Install app**
@@ -61,7 +69,7 @@ Then create their login under **Authentication → Users → Add user**.
 
 ## Free tier limits (plenty for this)
 - Supabase free: 500 MB database, 1 GB photo storage. Photos are shrunk before upload (about 200–400 KB each), so that's a few thousand photos.
-- Address lookup uses OpenStreetMap's free service. It's fine for door-knocking volume.
+- Geocodio free: 2,500 address lookups per day. Without a card on file it simply stops at that limit, so there are no surprise charges.
 
 ## Running it on a computer (optional, for development)
 ```bash
