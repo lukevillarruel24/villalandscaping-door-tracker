@@ -47,11 +47,19 @@ export default function ContactList({ stage }) {
         title={title}
         sub={`${list.length} ${list.length === 1 ? title.slice(0, -1).toLowerCase() : title.toLowerCase()}`}
         right={
-          stage === 'lead' && (
-            <button className="btn primary sm" onClick={() => nav('/contacts/new')}>
-              <Icon name="plus" size={16} /> New
+          <>
+            <button
+              className="btn sm"
+              onClick={() => nav(stage === 'client' ? '/estimates/new?stage=client' : '/estimates/new')}
+            >
+              <Icon name="plus" size={16} /> Estimate
             </button>
-          )
+            {stage === 'lead' && (
+              <button className="btn primary sm" onClick={() => nav('/contacts/new')}>
+                <Icon name="plus" size={16} /> Lead
+              </button>
+            )}
+          </>
         }
       />
       <div className="page-body">

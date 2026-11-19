@@ -9,6 +9,7 @@ import ContactList from './components/ContactList.jsx'
 import ContactDetail from './components/ContactDetail.jsx'
 import ContactForm from './components/ContactForm.jsx'
 import EstimateEditor from './components/EstimateEditor.jsx'
+import QuickEstimate from './components/QuickEstimate.jsx'
 import EstimatePrint from './components/EstimatePrint.jsx'
 import Stats from './components/Stats.jsx'
 import Account from './components/Account.jsx'
@@ -62,6 +63,7 @@ function Shell() {
           <Route path="/contacts/new" element={<ContactForm />} />
           <Route path="/contacts/:id" element={<ContactDetail />} />
           <Route path="/contacts/:id/edit" element={<ContactForm />} />
+          <Route path="/estimates/new" element={<QuickEstimate />} />
           <Route path="/estimates/:id" element={<EstimateEditor />} />
           <Route path="/estimates/:id/print" element={<EstimatePrint />} />
           <Route path="/stats" element={<Stats />} />
