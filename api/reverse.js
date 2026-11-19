@@ -54,6 +54,7 @@ export default async function handler(req, res) {
 }
 
 function formatAddress(x) {
+  if (x.formatted_address) return x.formatted_address
   const c = x.address_components || {}
   const street = [c.number, c.formatted_street || [c.street, c.suffix].filter(Boolean).join(' ')]
     .filter(Boolean)
