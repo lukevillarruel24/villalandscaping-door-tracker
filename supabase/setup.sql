@@ -224,6 +224,12 @@ begin
   end loop;
 end $$;
 
+-- ---------- Let signed-in users reach the tables (row security above still applies) ----------
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on all tables in schema public to authenticated;
+grant usage, select on all sequences in schema public to authenticated;
+grant execute on function public.is_team() to authenticated;
+
 -- ---------- Photo storage bucket (private) ----------
 insert into storage.buckets (id, name, public)
 values ('job-photos', 'job-photos', false)
