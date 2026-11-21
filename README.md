@@ -71,6 +71,8 @@ Allow location when it asks, so the map can show where you are.
 - The bar at the top shows **doors you've knocked today vs. the daily goal** (set the goal under Me).
 - **No signal?** Knocks are saved on the phone (dashed pins) and upload automatically when signal returns.
 - Filter the map by status, by person, by date, or to **Come back** pins only.
+- Zoom in close and each logged pin shows its **house number** above it.
+- **Press and hold on any house** (right-click on a computer) to see its address, nearby house numbers, and whether it's already been knocked. Tap **Log this door** to log it with that address filled in.
 
 **Follow-ups**
 - Leads have a **Next follow-up** date. Anything due today or overdue shows at the top of **Leads**, and the Leads tab gets a red badge.

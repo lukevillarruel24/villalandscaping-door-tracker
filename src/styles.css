@@ -470,3 +470,37 @@ button.legend { cursor: pointer; }
 .fab.main, .fab.locate { bottom: 30px; }
 .fab.basemap-toggle { bottom: 92px; }
 .pending-bar { bottom: 142px; }
+
+/* house numbers above pins */
+.leaflet-tooltip.pin-label {
+  background: rgba(255,255,255,.96); color: #111; border: none; border-radius: 6px;
+  padding: 1px 5px; font: 700 11px/1.3 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  box-shadow: 0 1px 3px rgba(0,0,0,.35); pointer-events: none; white-space: nowrap;
+}
+.leaflet-tooltip.pin-label::before { display: none; }
+.leaflet-tooltip.pin-label.sel { background: var(--green); color: #fff; }
+
+/* press-and-hold address lookup */
+.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.peek-ring { animation: peekspin 6s linear infinite; }
+@keyframes peekspin { to { stroke-dashoffset: -48; } }
+.peek-card {
+  position: absolute; z-index: 700; left: 10px; right: 10px; bottom: 14px;
+  padding: 12px 12px 12px 14px; box-shadow: 0 6px 22px rgba(0,0,0,.25);
+  display: flex; flex-direction: column; gap: 8px; animation: up .16s ease-out;
+}
+.peek-main { flex: 1; min-width: 0; }
+.peek-addr { font-size: 17px; font-weight: 700; margin-top: 2px; }
+.peek-skeleton { height: 18px; width: 70%; margin-top: 6px; border-radius: 6px; background: linear-gradient(90deg,#eee,#f6f6f6,#eee); background-size: 200% 100%; animation: shimmer 1s linear infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.peek-others { display: flex; flex-direction: column; gap: 4px; }
+.peek-near {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer;
+  background: #f6f4ee; border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; font: inherit; font-size: 14px; color: inherit;
+}
+.hold-tip {
+  position: absolute; z-index: 510; left: 10px; right: 10px; bottom: 146px; margin: 0 auto; max-width: 360px;
+  display: flex; align-items: center; gap: 8px; padding: 8px 6px 8px 12px; border-radius: 12px;
+  background: rgba(28,36,32,.9); color: #fff; font-size: 13px;
+}
+.hold-tip .icon-btn { color: #fff; }

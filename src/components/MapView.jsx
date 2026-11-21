@@ -1,18 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { MapContainer, TileLayer, CircleMarker, Circle, useMapEvents } from 'react-leaflet'
+import { MapContainer, TileLayer, CircleMarker, Circle, Tooltip, useMapEvents } from 'react-leaflet'
 import { useStore } from '../lib/store.jsx'
 import { STATUSES, STATUS_BY_KEY } from '../lib/constants.js'
 import { DEFAULT_CENTER, ARCGIS_KEY } from '../config.js'
-import { searchAddress } from '../lib/geo.js'
+import { searchAddress, reverseGeocode, distanceM } from '../lib/geo.js'
+import { houseNumber } from '../lib/format.js'
 import { isDue, isOverdue } from '../lib/dates.js'
 import { Icon } from './Icon.jsx'
 import DoorSheet from './DoorSheet.jsx'
 import NewDoorSheet from './NewDoorSheet.jsx'
+import PeekCard from './PeekCard.jsx'
 
 // Remember where the map was when switching tabs
 let savedView = null
 let lastFix = null
+
+// Address lookups from press-and-hold, remembered so the same roof isn't looked up twice
+const peekCache = new Map()
+const LABEL_ZOOM = 18
+const TIP_KEY = 'villa-doors-peek-tip-seen'
 
 const BASEMAP_KEY = 'villa-doors-basemap'
 function readBasemap() {
@@ -57,9 +64,41 @@ export default function MapView() {
   const [basemap, setBasemap] = useState(readBasemap)
   const [esriFailed, setEsriFailed] = useState(!ARCGIS_KEY)
   const esriErrors = useRef(0)
+  const [view, setView] = useState(() => ({ zoom: savedView?.zoom || 0, bounds: null }))
+  const [peek, setPeek] = useState(null)
+  const peekSeq = useRef(0)
+  const peekOpenedAt = useRef(0)
+  const lastPress = useRef(0)
+  const [showTip, setShowTip] = useState(() => {
+    try {
+      return !localStorage.getItem(TIP_KEY)
+    } catch {
+      return false
+    }
+  })
   const centeredOnce = useRef(!!savedView)
   const meRef = useRef(me)
   meRef.current = me
+
+  // Remember when each new finger/mouse press starts (see onTap above)
+  useEffect(() => {
+    if (!map) return
+    const el = map.getContainer()
+    const onDown = () => {
+      lastPress.current = Date.now()
+    }
+    el.addEventListener('pointerdown', onDown, true)
+    el.addEventListener('touchstart', onDown, true)
+    return () => {
+      el.removeEventListener('pointerdown', onDown, true)
+      el.removeEventListener('touchstart', onDown, true)
+    }
+  }, [map])
+
+  // Test hook (development only; stripped from the live app)
+  useEffect(() => {
+    if (import.meta.env.DEV && map) window.__map = map
+  }, [map])
 
   // Opened from the Leads tab with ?revisits=1
   useEffect(() => {
@@ -126,6 +165,59 @@ export default function MapView() {
 
   const selected = doors.find((d) => d.id === selectedId)
   const filtersOn = hidden.size > 0 || range !== 'all' || who !== 'all' || revisitsOnly
+
+  function dismissTip() {
+    setShowTip(false)
+    try {
+      localStorage.setItem(TIP_KEY, '1')
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function nearestDoor(lat, lng, maxM) {
+    let best = null
+    for (const d of doors) {
+      const m = distanceM([lat, lng], [d.lat, d.lng])
+      if (m <= maxM && (!best || m < best.m)) best = { door: d, m }
+    }
+    return best
+  }
+
+  // Press and hold on the map: show the address of that spot
+  async function startPeek(latlng) {
+    if (placing || newPin || selectedId) return
+    dismissTip()
+    setResults(null)
+    const { lat, lng } = latlng
+    const near = nearestDoor(lat, lng, 15)
+    const id = ++peekSeq.current
+    peekOpenedAt.current = Date.now()
+    const key = `${lat.toFixed(5)},${lng.toFixed(5)}`
+    const cached = peekCache.get(key)
+    if (cached) {
+      setPeek({ lat, lng, near, status: 'done', result: cached, chosen: pickBest(cached) })
+      return
+    }
+    setPeek({ lat, lng, near, status: 'loading', result: null, chosen: null })
+    const r = await reverseGeocode(lat, lng)
+    peekCache.set(key, r)
+    if (peekSeq.current !== id) return
+    setPeek((p) => (p ? { ...p, status: 'done', result: r, chosen: pickBest(r) } : p))
+  }
+
+  function logFromPeek() {
+    if (!peek) return
+    const { lat, lng, result, chosen } = peek
+    setPeek(null)
+    setNewPin({
+      lat,
+      lng,
+      prefill: chosen
+        ? { address: chosen.address, hasNumber: chosen.hasNumber, options: result?.options || [] }
+        : null,
+    })
+  }
 
   function toggleBasemap() {
     const next = basemap === 'map' ? 'satellite' : 'map'
@@ -194,6 +286,7 @@ export default function MapView() {
         zoom={savedView?.zoom || (me ? 18 : 14)}
         maxZoom={20}
         zoomControl={false}
+        tapHold
         className="map"
       >
         {basemap === 'map' && (
@@ -235,10 +328,22 @@ export default function MapView() {
             maxZoom={20}
           />
         )}
-        <ViewSaver />
+        <ViewSaver
+          onView={setView}
+          onHold={startPeek}
+          onTap={() => {
+            // Lifting the finger after a long-press can register as a tap. Only close
+            // the card for a new press that started after the card opened.
+            if (peek && lastPress.current > peekOpenedAt.current) setPeek(null)
+          }}
+        />
         {visible.map((d) => {
           const isSel = d.id === selectedId
           const dueNow = d.status === 'come_back' && isDue(d.follow_up_at)
+          const num =
+            view.zoom >= LABEL_ZOOM && (!view.bounds || view.bounds.contains([d.lat, d.lng]))
+              ? houseNumber(d.address)
+              : null
           return (
             <CircleMarker
               key={d.id}
@@ -251,10 +356,44 @@ export default function MapView() {
                 fillColor: STATUS_BY_KEY[d.status]?.color || '#666',
                 fillOpacity: d._pending ? 0.7 : 1,
               }}
-              eventHandlers={{ click: () => !placing && setSelectedId(d.id) }}
-            />
+              eventHandlers={{
+                click: () => {
+                  if (placing) return
+                  setPeek(null)
+                  setSelectedId(d.id)
+                },
+              }}
+            >
+              {num && (
+                <Tooltip
+                  permanent
+                  direction="top"
+                  offset={[0, -9]}
+                  className={'pin-label' + (isSel ? ' sel' : '')}
+                  interactive={false}
+                >
+                  {num}
+                </Tooltip>
+              )}
+            </CircleMarker>
           )
         })}
+        {peek && (
+          <>
+            <CircleMarker
+              center={[peek.lat, peek.lng]}
+              radius={16}
+              pathOptions={{ color: '#fff', weight: 3, dashArray: '4 4', fill: false, className: 'peek-ring' }}
+              interactive={false}
+            />
+            <CircleMarker
+              center={[peek.lat, peek.lng]}
+              radius={5}
+              pathOptions={{ color: '#fff', weight: 2, fillColor: '#1f4d2e', fillOpacity: 1 }}
+              interactive={false}
+            />
+          </>
+        )}
         {me && (
           <>
             {me.acc < 200 && (
@@ -451,8 +590,32 @@ export default function MapView() {
         </>
       )}
 
+      {peek && !placing && !selected && !newPin && (
+        <PeekCard
+          peek={peek}
+          onClose={() => setPeek(null)}
+          onLog={logFromPeek}
+          onOpenDoor={(id) => {
+            setPeek(null)
+            setSelectedId(id)
+          }}
+          onPickOption={(o) => setPeek((p) => ({ ...p, chosen: o }))}
+        />
+      )}
+
+      {showTip && !peek && !placing && !selected && !newPin && !queue.length && view.zoom >= 16 && (
+        <div className="hold-tip" role="note">
+          <span>
+            <b>Tip:</b> press and hold on any house to see its address.
+          </span>
+          <button className="icon-btn sm" onClick={dismissTip} aria-label="Got it">
+            <Icon name="close" size={14} />
+          </button>
+        </div>
+      )}
+
       {/* Floating buttons */}
-      {!placing && !selected && !newPin && (
+      {!placing && !selected && !newPin && !peek && (
         <>
           <button className="fab locate" onClick={locate} disabled={!me} aria-label="Center on me">
             <Icon name="locate" size={22} />
@@ -488,12 +651,32 @@ export default function MapView() {
   )
 }
 
-function ViewSaver() {
-  useMapEvents({
+function ViewSaver({ onView, onHold, onTap }) {
+  const map = useMapEvents({
     moveend(e) {
       const m = e.target
       savedView = { center: m.getCenter(), zoom: m.getZoom() }
+      onView({ zoom: m.getZoom(), bounds: m.getBounds().pad(0.2) })
+    },
+    // Long-press on phones (and right-click on a computer)
+    contextmenu(e) {
+      e.originalEvent?.preventDefault?.()
+      onHold(e.latlng)
+    },
+    click() {
+      onTap()
     },
   })
+  useEffect(() => {
+    onView({ zoom: map.getZoom(), bounds: map.getBounds().pad(0.2) })
+  }, [map])
   return null
+}
+
+function pickBest(r) {
+  if (!r) return null
+  const withNum = (r.options || []).find((o) => o.hasNumber)
+  if (withNum) return withNum
+  if (r.options?.[0]) return r.options[0]
+  return r.address ? { address: r.address, hasNumber: r.hasNumber } : null
 }

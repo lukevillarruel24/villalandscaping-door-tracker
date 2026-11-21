@@ -24,6 +24,13 @@ export default function NewDoorSheet({ pin, onClose, onOpenExisting, onSavedNext
 
   useEffect(() => {
     let alive = true
+    if (pin.prefill) {
+      setAddress(pin.prefill.address || '')
+      setOptions(pin.prefill.options || [])
+      setNoNumber(!!pin.prefill.address && !pin.prefill.hasNumber)
+      setLooking(false)
+      return
+    }
     reverseGeocode(pin.lat, pin.lng).then((r) => {
       if (!alive) return
       setAddress((cur) => cur || r.address)

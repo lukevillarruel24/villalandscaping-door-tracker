@@ -46,3 +46,9 @@ export function directionsHref(c) {
   const dest = c.lat != null && c.lng != null ? `${c.lat},${c.lng}` : c.address || ''
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`
 }
+
+// "1234 Oak St, Calhoun" -> "1234" (also "1234A", "12-B"); null when there's no house number
+export function houseNumber(address) {
+  const m = String(address || '').match(/^\s*(\d+[A-Za-z]?(?:-\d*[A-Za-z]?)?)\b/)
+  return m ? m[1] : null
+}
