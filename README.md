@@ -37,7 +37,14 @@ When a pin is dropped, the app looks up the address with [Geocodio](https://www.
 
 The key lives only on Vercel's server (`api/reverse.js`), never in the app on the phone, and only signed-in team members can use the lookup.
 
-### 5. Put it on the phones
+### 5. Satellite view (Esri)
+The map has a **Map / Satellite** button. Satellite photos come from Esri (free up to 2 million map tiles a month).
+1. At [location.arcgis.com](https://location.arcgis.com), create an API key with the **Location services → Basemaps** privileges, limited to your app's URL.
+2. In Vercel: **Environment Variables**, add `VITE_ARCGIS_API_KEY` with the key, then **Redeploy**.
+
+Without the key, or if Esri ever fails, Satellite automatically uses free USGS aerial photos (blurrier, about 1 meter per pixel).
+
+### 6. Put it on the phones
 Open the link on each phone and sign in.
 - **iPhone (Safari):** Share button → **Add to Home Screen**
 - **Android (Chrome):** ⋮ menu → **Add to Home screen** / **Install app**

@@ -24,3 +24,7 @@ export const TEAM_CONTACTS = {
 
 // Where the map opens before GPS kicks in (Calhoun, GA)
 export const DEFAULT_CENTER = [34.5026, -84.9511]
+
+// Satellite photos. Esri key is set in Vercel as VITE_ARCGIS_API_KEY.
+// Without a key (or if Esri fails) the app falls back to free USGS aerial photos.
+export const ARCGIS_KEY = import.meta.env.VITE_ARCGIS_API_KEY || ''

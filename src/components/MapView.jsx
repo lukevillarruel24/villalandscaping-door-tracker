@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { MapContainer, TileLayer, CircleMarker, Circle, useMapEvents } from 'react-leaflet'
 import { useStore } from '../lib/store.jsx'
 import { STATUSES, STATUS_BY_KEY } from '../lib/constants.js'
-import { DEFAULT_CENTER } from '../config.js'
+import { DEFAULT_CENTER, ARCGIS_KEY } from '../config.js'
 import { searchAddress } from '../lib/geo.js'
 import { isDue, isOverdue } from '../lib/dates.js'
 import { Icon } from './Icon.jsx'
@@ -13,6 +13,15 @@ import NewDoorSheet from './NewDoorSheet.jsx'
 // Remember where the map was when switching tabs
 let savedView = null
 let lastFix = null
+
+const BASEMAP_KEY = 'villa-doors-basemap'
+function readBasemap() {
+  try {
+    return localStorage.getItem(BASEMAP_KEY) === 'satellite' ? 'satellite' : 'map'
+  } catch {
+    return 'map'
+  }
+}
 
 const RANGES = [
   { key: 'all', label: 'All time' },
@@ -45,6 +54,9 @@ export default function MapView() {
   const [showFilters, setShowFilters] = useState(false)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null)
+  const [basemap, setBasemap] = useState(readBasemap)
+  const [esriFailed, setEsriFailed] = useState(!ARCGIS_KEY)
+  const esriErrors = useRef(0)
   const centeredOnce = useRef(!!savedView)
   const meRef = useRef(me)
   meRef.current = me
@@ -115,6 +127,21 @@ export default function MapView() {
   const selected = doors.find((d) => d.id === selectedId)
   const filtersOn = hidden.size > 0 || range !== 'all' || who !== 'all' || revisitsOnly
 
+  function toggleBasemap() {
+    const next = basemap === 'map' ? 'satellite' : 'map'
+    setBasemap(next)
+    try {
+      localStorage.setItem(BASEMAP_KEY, next)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function onEsriTileError() {
+    esriErrors.current += 1
+    if (esriErrors.current >= 4) setEsriFailed(true)
+  }
+
   function locate() {
     if (me && map) map.flyTo([me.lat, me.lng], Math.max(map.getZoom(), 18), { duration: 0.6 })
   }
@@ -169,12 +196,45 @@ export default function MapView() {
         zoomControl={false}
         className="map"
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-          maxNativeZoom={19}
-          maxZoom={20}
-        />
+        {basemap === 'map' && (
+          <TileLayer
+            key="osm"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+            maxNativeZoom={19}
+            maxZoom={20}
+          />
+        )}
+        {basemap === 'satellite' && !esriFailed && (
+          <>
+            <TileLayer
+              key="esri-imagery"
+              attribution="Esri, Maxar, Earthstar Geographics"
+              url={`https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?token=${ARCGIS_KEY}`}
+              maxNativeZoom={19}
+              maxZoom={20}
+              eventHandlers={{ tileerror: onEsriTileError }}
+            />
+            <TileLayer
+              key="esri-labels"
+              attribution="TomTom, Garmin, &copy; OSM"
+              url={`https://static-map-tiles-api.arcgis.com/arcgis/rest/services/static-basemap-tiles-service/v1/arcgis/imagery/labels/static/tile/{z}/{y}/{x}?token=${ARCGIS_KEY}`}
+              tileSize={512}
+              zoomOffset={-1}
+              maxNativeZoom={20}
+              maxZoom={20}
+            />
+          </>
+        )}
+        {basemap === 'satellite' && esriFailed && (
+          <TileLayer
+            key="usgs"
+            attribution="USGS The National Map: Orthoimagery"
+            url="https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryTopo/MapServer/tile/{z}/{y}/{x}"
+            maxNativeZoom={16}
+            maxZoom={20}
+          />
+        )}
         <ViewSaver />
         {visible.map((d) => {
           const isSel = d.id === selectedId
@@ -396,6 +456,14 @@ export default function MapView() {
         <>
           <button className="fab locate" onClick={locate} disabled={!me} aria-label="Center on me">
             <Icon name="locate" size={22} />
+          </button>
+          <button
+            className={'fab basemap-toggle' + (basemap === 'satellite' ? ' on' : '')}
+            onClick={toggleBasemap}
+            aria-label={basemap === 'map' ? 'Show satellite view' : 'Show street map'}
+          >
+            <Icon name={basemap === 'map' ? 'satellite' : 'map'} size={20} />
+            <span>{basemap === 'map' ? 'Satellite' : 'Map'}</span>
           </button>
           <button className="fab main" onClick={startPlacing}>
             <Icon name="plus" size={22} stroke={2.6} />

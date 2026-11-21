@@ -458,3 +458,15 @@ button.legend { cursor: pointer; }
   .doc-title { font-size: 16px; }
 }
 .doc-brand-wrap .muted { overflow-wrap: anywhere; }
+
+/* map / satellite toggle */
+.fab.basemap-toggle {
+  left: 14px; bottom: 78px; height: 40px; padding: 0 12px; border-radius: 20px;
+  background: #fff; color: var(--green); display: flex; align-items: center; gap: 6px; font-size: 13px;
+}
+.fab.basemap-toggle.on { background: var(--green); color: #fff; }
+.pending-bar { bottom: 128px; }
+/* keep map buttons clear of the map credits line */
+.fab.main, .fab.locate { bottom: 30px; }
+.fab.basemap-toggle { bottom: 92px; }
+.pending-bar { bottom: 142px; }

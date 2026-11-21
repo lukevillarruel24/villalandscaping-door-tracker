@@ -21,6 +21,7 @@ const PATHS = {
   check: 'M5 12l5 5L20 7',
   print: 'M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z',
   history: 'M3 12a9 9 0 1 0 3-6.7L3 8m0-5v5h5m4-1v5l3 3',
+  satellite: 'M4 4h7v7H4zM13 13h7v7h-7zM13 4l7 7M4 13l7 7',
   pin: 'M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12zm0-9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
 }
 
